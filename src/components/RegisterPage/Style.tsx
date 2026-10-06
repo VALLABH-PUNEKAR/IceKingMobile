@@ -1,0 +1,117 @@
+import {StyleSheet} from 'react-native'
+
+const COLORS = {
+  skyBlue: "#6EC6FF",
+  pink: "#FF69B4",
+  yellow: "#FFD93D",
+  mint: "#7EE8A6",
+  lavender: "#B388FF",
+  ink: "#5b4a8a",
+  inkLight: "#8a7db0",
+  white: "#FFFFFF",
+} as const;
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  scrollContent: { paddingBottom: 30 },
+
+  headerWrap: { alignItems: "center" },
+  logoEmoji: { marginBottom: 6 },
+  title: { fontWeight: "900", color: COLORS.white, textAlign: "center" },
+  subtitle: { color: "rgba(255,255,255,0.85)", fontWeight: "700", marginTop: 4, textAlign: "center" },
+
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 28,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+
+  avatarWrap: { alignItems: "center", marginBottom: 20 },
+  avatarTouchable: { width: 88, height: 88 },
+  avatarImage: { width: 88, height: 88, borderRadius: 44, backgroundColor: "#F7F5FF" },
+  avatarPlaceholder: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "#F7F5FF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#EDE7FA",
+    borderStyle: "dashed",
+  },
+  avatarOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "rgba(91,74,138,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.pink,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  avatarLabel: { marginTop: 8, fontSize: 12, fontWeight: "700", color: COLORS.inkLight },
+
+  row: { flexDirection: "row", gap: 10 },
+  rowInput: { flex: 1 },
+
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F7F5FF",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    height: 52,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    gap: 10,
+  },
+  inputWrapFocused: { borderColor: COLORS.lavender, backgroundColor: "#FFFFFF" },
+  input: { flex: 1, color: COLORS.ink, fontWeight: "600", fontSize: 14, paddingVertical: 0 },
+  placeholderText: { color: COLORS.inkLight, fontWeight: "400" },
+  passwordHint: { fontSize: 11, color: COLORS.inkLight, fontWeight: "600", marginTop: 5, marginLeft: 4 },
+
+  registerBtn: {
+    height: 54,
+    borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.pink,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  registerBtnText: { color: COLORS.white, fontWeight: "900", letterSpacing: 0.3 },
+
+  terms: {
+    fontSize: 11,
+    color: COLORS.inkLight,
+    textAlign: "center",
+    marginTop: 14,
+    lineHeight: 16,
+  },
+
+  loginRow: { flexDirection: "row", justifyContent: "center", marginTop: 22 },
+  loginText: { color: "rgba(255,255,255,0.85)", fontWeight: "600" },
+  loginLink: { color: COLORS.white, fontWeight: "900", textDecorationLine: "underline" },
+});
+export default styles
