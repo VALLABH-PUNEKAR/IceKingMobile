@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,26 +9,16 @@ import {
   Platform,
   useWindowDimensions,
   StatusBar,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import api from "@/api/api";
 
 /* ============================================================
    IceKing — Orders Screen (React Native / Expo, TypeScript)
-   Same theme/conventions as HomeScreen.tsx, CartScreen.tsx and
-   ProfileScreen.tsx: candy palette, rounded cards, soft shadows.
-
-   Wiring note (matches your BottomTabs / BottomNavigation /
-   MainNavigator setup):
-     1. Add "Orders" to BottomTab in BottomTabs.tsx:
-          export type BottomTab = "Home" | "Cart" | "Orders" | "favorites" | "Profile";
-        and add an entry to BOTTOM_TABS:
-          { key: "Orders", label: "Orders", icon: "receipt-outline" }
-     2. Add it to MainTabParamList + <Tab.Screen> in MainNavigator.tsx:
-          Orders: undefined;
-          <Tab.Screen name="Orders" component={OrdersScreen} />
-     This file ships with its own COLORS/styles (self-contained,
-     like CartScreen/ProfileScreen) — swap in your shared
-     "./Colors" and "./Styles" imports if you'd rather centralize.
+   Connected to Spring Boot OrderController (/order/user)
    ============================================================ */
 
 const COLORS = {
@@ -43,119 +33,139 @@ const COLORS = {
   bg: "#FBF9FF",
 } as const;
 
-/* ---------------- Types ---------------- */
-type OrderStatus = "Preparing" | "Out for Delivery" | "Delivered" | "Cancelled";
+/* ---------------- Types matching OrderResponseDTO & OrderItemResponseDTO ---------------- */
+export type BackendOrderStatus =
+  | "PENDING"
+  | "CONFIRMED"
+  | "PREPARING"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "CANCELLED";
+
+export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+
+export type OrderItemResponseDTO = {
+  id: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  createdAt?: string;
+};
+
+export type OrderResponseDTO = {
+  id: number;
+  orderNumber: string;
+  userId: number;
+  subtotal: number;
+  taxAmount: number;
+  shippingFee: number;
+  totalAmount: number;
+  orderStatus: BackendOrderStatus;
+  paymentStatus: PaymentStatus;
+  shippingAddressSnapshot?: string;
+  createdAt: string;
+  updatedAt?: string;
+  orderItems: OrderItemResponseDTO[];
+};
+
 type FilterKey = "All" | "Active" | "Completed" | "Cancelled";
-
-type OrderItem = {
-  name: string;
-  emoji: string;
-  qty: number;
-};
-
-type Order = {
-  id: string;
-  date: string;
-  status: OrderStatus;
-  items: OrderItem[];
-  total: number;
-};
 
 type OrdersScreenProps = {
   navigation?: { navigate: (screen: string) => void };
 };
 
-/* ---------------- Mock data (swap for a real /orders fetch) ---------------- */
-const ORDERS: Order[] = [
-  {
-    id: "#IK-3025",
-    date: "Today, 2:45 PM",
-    status: "Out for Delivery",
-    items: [
-      { name: "Rainbow Scoop", emoji: "🌈", qty: 2 },
-      { name: "Chocolate Blast", emoji: "🍫", qty: 1 },
-    ],
-    total: 16.0,
-  },
-  {
-    id: "#IK-3019",
-    date: "Today, 11:20 AM",
-    status: "Preparing",
-    items: [{ name: "Blueberry Heaven", emoji: "🫐", qty: 1 }],
-    total: 4.9,
-  },
-  {
-    id: "#IK-2987",
-    date: "Yesterday, 6:10 PM",
-    status: "Delivered",
-    items: [
-      { name: "Vanilla Dream", emoji: "🍦", qty: 2 },
-      { name: "Mango Magic", emoji: "🥭", qty: 1 },
-    ],
-    total: 14.2,
-  },
-  {
-    id: "#IK-2960",
-    date: "Mar 2, 1:05 PM",
-    status: "Delivered",
-    items: [{ name: "Strawberry Swirl", emoji: "🍓", qty: 3 }],
-    total: 14.4,
-  },
-  {
-    id: "#IK-2941",
-    date: "Feb 27, 5:30 PM",
-    status: "Cancelled",
-    items: [{ name: "Mint Chip Chill", emoji: "🌿", qty: 1 }],
-    total: 4.7,
-  },
-];
-
 const FILTERS: FilterKey[] = ["All", "Active", "Completed", "Cancelled"];
 
-const STATUS_STYLE: Record<OrderStatus, { bg: string; text: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  Preparing: { bg: "#FFF6DE", text: "#B8860B", icon: "time-outline" },
-  "Out for Delivery": { bg: "#E9F3FF", text: "#2E7BC7", icon: "bicycle-outline" },
-  Delivered: { bg: "#E8FAF0", text: "#2E9E5B", icon: "checkmark-circle-outline" },
-  Cancelled: { bg: "#FFF0F0", text: "#E4574A", icon: "close-circle-outline" },
+const STATUS_STYLE: Record<
+  BackendOrderStatus,
+  { label: string; bg: string; text: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
+  PENDING: { label: "Pending", bg: "#FFF6DE", text: "#B8860B", icon: "time-outline" },
+  CONFIRMED: { label: "Confirmed", bg: "#E9F3FF", text: "#2E7BC7", icon: "checkmark-circle-outline" },
+  PREPARING: { label: "Preparing", bg: "#FFF6DE", text: "#B8860B", icon: "time-outline" },
+  OUT_FOR_DELIVERY: { label: "Out for Delivery", bg: "#E9F3FF", text: "#2E7BC7", icon: "bicycle-outline" },
+  DELIVERED: { label: "Delivered", bg: "#E8FAF0", text: "#2E9E5B", icon: "checkmark-circle-outline" },
+  CANCELLED: { label: "Cancelled", bg: "#FFF0F0", text: "#E4574A", icon: "close-circle-outline" },
 };
 
-function matchesFilter(status: OrderStatus, filter: FilterKey): boolean {
+function matchesFilter(status: BackendOrderStatus, filter: FilterKey): boolean {
   if (filter === "All") return true;
-  if (filter === "Active") return status === "Preparing" || status === "Out for Delivery";
-  if (filter === "Completed") return status === "Delivered";
-  return status === "Cancelled";
+  if (filter === "Active")
+    return status === "PENDING" || status === "CONFIRMED" || status === "PREPARING" || status === "OUT_FOR_DELIVERY";
+  if (filter === "Completed") return status === "DELIVERED";
+  return status === "CANCELLED";
 }
 
 export default function OrdersScreen({ navigation }: OrdersScreenProps) {
   const { width } = useWindowDimensions();
   const scale = (size: number): number => (width / 375) * size;
+
+  const [orders, setOrders] = useState<OrderResponseDTO[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [filter, setFilter] = useState<FilterKey>("All");
 
-  const filteredOrders = useMemo(
-    () => ORDERS.filter((o) => matchesFilter(o.status, filter)),
-    [filter]
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get<OrderResponseDTO[]>("/order/user");
+      if (response?.data) {
+        setOrders(response.data);
+      }
+    } catch (error: any) {
+      console.error("Fetch orders error:", error?.response?.data || error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders();
+    }, [])
   );
 
-  const itemsSummary = (items: OrderItem[]) =>
-    items.map((i) => `${i.name}${i.qty > 1 ? ` x${i.qty}` : ""}`).join(", ");
+  const filteredOrders = useMemo(
+    () => orders.filter((o) => matchesFilter(o.orderStatus, filter)),
+    [orders, filter]
+  );
+
+  const itemsSummary = (items: OrderItemResponseDTO[]) => {
+    if (!items || items.length === 0) return "No items";
+    return items
+      .map((i) => `${i.productName}${i.quantity > 1 ? ` x${i.quantity}` : ""}`)
+      .join(", ");
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* ---------- Header (matches Home's greeting style) ---------- */}
+        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={[styles.greetingSmall, { fontSize: scale(13) }]}>Track your treats</Text>
             <Text style={[styles.greetingName, { fontSize: scale(21) }]}>My Orders</Text>
           </View>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Ionicons name="search" size={18} color={COLORS.ink} />
+          <TouchableOpacity style={styles.iconBtn} onPress={fetchOrders}>
+            <Ionicons name="refresh" size={18} color={COLORS.ink} />
           </TouchableOpacity>
         </View>
 
-        {/* ---------- Status filter chips (matches Home's category chips) ---------- */}
+        {/* Filter chips */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -175,11 +185,17 @@ export default function OrdersScreen({ navigation }: OrdersScreenProps) {
           })}
         </ScrollView>
 
-        {/* ---------- Orders list ---------- */}
-        {filteredOrders.length === 0 ? (
+        {/* Orders Content */}
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={COLORS.pink} />
+          </View>
+        ) : filteredOrders.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Text style={{ fontSize: scale(56) }}>🍦</Text>
-            <Text style={[styles.emptyTitle, { fontSize: scale(16) }]}>No {filter.toLowerCase()} orders</Text>
+            <Text style={[styles.emptyTitle, { fontSize: scale(16) }]}>
+              No {filter.toLowerCase()} orders
+            </Text>
             <Text style={[styles.emptySubtitle, { fontSize: scale(12.5) }]}>
               Your {filter === "All" ? "" : filter.toLowerCase()} orders will show up here.
             </Text>
@@ -187,46 +203,50 @@ export default function OrdersScreen({ navigation }: OrdersScreenProps) {
         ) : (
           <View style={styles.listWrap}>
             {filteredOrders.map((order) => {
-              const statusStyle = STATUS_STYLE[order.status];
-              const canReorder = order.status === "Delivered" || order.status === "Cancelled";
+              const statusStyle = STATUS_STYLE[order.orderStatus] || STATUS_STYLE.PENDING;
+              const canReorder = order.orderStatus === "DELIVERED" || order.orderStatus === "CANCELLED";
+
               return (
-                <TouchableOpacity key={order.id} style={styles.orderCard} activeOpacity={0.85}>
+                <TouchableOpacity
+                  key={order.id || order.orderNumber}
+                  style={styles.orderCard}
+                  activeOpacity={0.85}
+                >
                   <View style={styles.orderTop}>
-                    <View style={styles.orderEmojiStack}>
-                      {order.items.slice(0, 2).map((item, idx) => (
-                        <View
-                          key={idx}
-                          style={[
-                            styles.orderEmojiCircle,
-                            idx > 0 && { marginLeft: -12 },
-                          ]}
-                        >
-                          <Text style={{ fontSize: scale(18) }}>{item.emoji}</Text>
-                        </View>
-                      ))}
+                    <View style={styles.orderEmojiCircle}>
+                      <Text style={{ fontSize: scale(18) }}>🍦</Text>
                     </View>
 
                     <View style={styles.orderInfo}>
-                      <Text style={[styles.orderId, { fontSize: scale(13.5) }]}>{order.id}</Text>
-                      <Text style={[styles.orderDate, { fontSize: scale(11.5) }]}>{order.date}</Text>
+                      <Text style={[styles.orderId, { fontSize: scale(13.5) }]}>
+                        {order.orderNumber || `#IK-${order.id}`}
+                      </Text>
+                      <Text style={[styles.orderDate, { fontSize: scale(11.5) }]}>
+                        {formatDate(order.createdAt)}
+                      </Text>
                     </View>
 
                     <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
                       <Ionicons name={statusStyle.icon} size={12} color={statusStyle.text} />
-                      <Text style={[styles.statusText, { color: statusStyle.text }]}>{order.status}</Text>
+                      <Text style={[styles.statusText, { color: statusStyle.text }]}>
+                        {statusStyle.label}
+                      </Text>
                     </View>
                   </View>
 
                   <Text style={[styles.orderItems, { fontSize: scale(12.5) }]} numberOfLines={1}>
-                    {itemsSummary(order.items)}
+                    {itemsSummary(order.orderItems)}
                   </Text>
 
                   <View style={styles.orderBottom}>
                     <Text style={[styles.orderTotal, { fontSize: scale(15) }]}>
-                      ${order.total.toFixed(2)}
+                      ${Number(order.totalAmount ?? 0).toFixed(2)}
                     </Text>
                     {canReorder ? (
-                      <TouchableOpacity style={styles.reorderBtn}>
+                      <TouchableOpacity
+                        style={styles.reorderBtn}
+                        onPress={() => navigation?.navigate?.("Home")}
+                      >
                         <Ionicons name="refresh" size={13} color={COLORS.white} />
                         <Text style={styles.reorderText}>Reorder</Text>
                       </TouchableOpacity>
@@ -299,7 +319,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   orderTop: { flexDirection: "row", alignItems: "center" },
-  orderEmojiStack: { flexDirection: "row" },
   orderEmojiCircle: {
     width: 38,
     height: 38,
@@ -349,6 +368,7 @@ const styles = StyleSheet.create({
   trackBtn: { flexDirection: "row", alignItems: "center", gap: 2 },
   trackText: { color: COLORS.pink, fontWeight: "800", fontSize: 12.5 },
 
+  loadingWrap: { paddingVertical: 60, alignItems: "center", justifyContent: "center" },
   emptyWrap: { alignItems: "center", justifyContent: "center", paddingVertical: 60, paddingHorizontal: 30 },
   emptyTitle: { fontWeight: "900", color: COLORS.ink, marginTop: 10 },
   emptySubtitle: { fontWeight: "600", color: COLORS.inkLight, marginTop: 4, textAlign: "center" },

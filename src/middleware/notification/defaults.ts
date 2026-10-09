@@ -1,20 +1,20 @@
 import { NotificationContext } from './types';
 
-// Used whenever a field is missing or fails vocabulary validation in
-// contextNormalizer.ts. Keep these values inside ALLOWED_VALUES for
-// each field, or they'll themselves be out-of-vocabulary.
+// Used when a field is missing or isn't a value the model saw in training
+// (see contextNormalizer.ts). Every value here must exist in vocabulary.ts -
+// 'scenario' is deliberately a neutral one that makes no discount/cart claims.
 export const DEFAULT_CONTEXT: Required<NotificationContext> = {
-  scenario: 'General Update',
-  product: 'our app',
-  category: 'General',
+  scenario: 'Trends & Recommendations',
+  product: 'Coffee Toffee Crunch',
+  category: 'Ice Cream',
   customer_type: 'Returning',
   user_activity: 'App Open',
   time_of_day: 'Afternoon',
   day_type: 'Weekday',
-  season: 'Spring',
+  season: 'Summer',
   weather: 'Clear',
   discount: '0%',
   urgency: 'Low',
   tone: 'Friendly',
-  emoji: '🔔',
+  emoji: '🍦',
 };

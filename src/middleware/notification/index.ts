@@ -6,13 +6,11 @@ import { sanitizeOutput } from './textSanitizer';
 import { dispatchLocalNotification, requestNotificationPermission } from './notificationDispatcher';
 
 /**
- * Public entry point for the middleware. Wires together:
- *   context (raw) -> normalize + build prompt -> SLM -> sanitize -> result
+ * Public entry point for the middleware:
+ *   context (raw) -> normalize + build prompt -> SLM -> sanitize -> (notify)
  *
- * Generation and dispatch are kept as separate steps internally
- * (generateNotification vs dispatchLocalNotification) so the UI can
- * preview SLM output before firing a real device notification, but
- * generateAndNotify below does both in one call for the common case.
+ * generateNotification only produces text (preview); generateAndNotify also
+ * shows a real device notification.
  */
 export function useNotificationGenerator() {
   const { generate, isReady, isGenerating, interrupt } = useSLMBridge();
@@ -28,12 +26,7 @@ export function useNotificationGenerator() {
       const rawOutput = await generate(prompt, options);
       const notification = sanitizeOutput(rawOutput, prompt);
 
-      return {
-        notification,
-        rawOutput,
-        prompt,
-        durationMs: Date.now() - startedAt,
-      };
+      return { notification, rawOutput, prompt, durationMs: Date.now() - startedAt };
     },
     [generate]
   );
@@ -45,9 +38,20 @@ export function useNotificationGenerator() {
       options?: GenerationOptions
     ): Promise<GenerationResult> => {
       const result = await generateNotification(context, options);
-      await requestNotificationPermission();
+
+      if (!result.notification) {
+        console.warn('[notification] SLM returned empty text - nothing dispatched');
+        return { ...result, dispatched: false };
+      }
+
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        console.warn('[notification] permission not granted - nothing dispatched');
+        return { ...result, dispatched: false };
+      }
+
       await dispatchLocalNotification(title, result.notification);
-      return result;
+      return { ...result, dispatched: true };
     },
     [generateNotification]
   );
@@ -57,5 +61,8 @@ export function useNotificationGenerator() {
 
 export * from './types';
 export { buildPrompt } from './contextBuilder';
-export { normalizeContext, ALLOWED_VALUES } from './contextNormalizer';
+export { normalizeContext } from './contextNormalizer';
+export { VOCABULARY } from './vocabulary';
+export { getTimeContext, getTimeOfDay, getDayType, getSeason } from './contextProviders';
+export { formatSLMError, preloadSLM } from './slmBridge';
 export { dispatchLocalNotification, requestNotificationPermission } from './notificationDispatcher';

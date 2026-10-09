@@ -14,21 +14,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { styles } from "@/components/ViewProductsPage/ProductStyle";
 import { COLORS } from "@/components/ViewProductsPage/ProductColors";
 import api from "@/api/api";
+import { formatSLMError, useNotificationGenerator } from "@/middleware/notification";
 
 /* ============================================================
-   IceKing — View Product Screen (React Native / Expo, TypeScript)
    Opens when a product card on Home is tapped. Shows the full
    detail for a single Flavor — same type as HomeScreen.tsx, so
    the whole object can be passed straight through, no refetch
    needed (though a refetch-by-id path is noted below too).
 
-   Two actions at the bottom:
-     - Add to Cart: calls onAddToCart(product, quantity) and
-       stays on this screen.
-     - Order Now: calls onOrderNow(product, quantity) if you
-       pass one (e.g. to jump straight into your checkout flow);
-       if you don't pass onOrderNow, it falls back to adding the
-       item to the cart and navigating to "Cart" automatically.
+   The action at the bottom adds the selected quantity to the cart.
 
    Wiring into HomeScreen.tsx:
      1. Wrap the card's outer <View> in renderFlavor with a
@@ -85,8 +79,6 @@ type Flavor = {
 type ViewProductScreenProps = {
   product: Flavor;
   navigation?: { goBack?: () => void; navigate?: (screen: string, params?: any) => void };
-  onAddToCart?: (product: Flavor, quantity: number) => void;
-  onOrderNow?: (product: Flavor, quantity: number) => void;
   isFavorite?: boolean;
   onToggleFavorite?: (id: string | number) => void;
 };
@@ -94,11 +86,10 @@ type ViewProductScreenProps = {
 export default function ViewProductScreen({
   product,
   navigation,
-  onAddToCart,
-  onOrderNow,
   isFavorite = false,
   onToggleFavorite,
 }: ViewProductScreenProps) {
+  const { generateAndNotify, isReady, isGenerating } = useNotificationGenerator()
   const { width } = useWindowDimensions();
   const scale = (size: number): number => (width / 375) * size;
 
@@ -139,24 +130,45 @@ export default function ViewProductScreen({
 
   const handleAddToCart = async () => {
     
-
     const success = await saveToCartApi(quantity);
     if (success) {
+      if (isReady) {
+          generateAndNotify(
+            {
+          scenario: "Cart & Purchase Intent",
+          product: product?.name || "Ice Cream",
+          category: product?.categoryName || "Dessert",
+          customer_type: "New",
+          user_activity: "Adding to Cart",
+          time_of_day: "Afternoon",
+          day_type: "Weekday",
+          season: "Winter",
+          weather: "Cold",
+          discount: hasDiscount ? `${Math.round(((price - discountPrice) / price) * 100)}%` : "0%",
+          urgency: "Medium",
+          tone: "Exciting",
+          emoji: "🍦",
+        },
+          
+          
+          `Added ${product?.name} to your cart!`
+          )
+          .then(({ notification }) => {
+          console.log("SLM Notification Output:", notification);
+        })
+        .catch((err) => {
+          const reason = formatSLMError(err);
+          console.warn("Notification generation failed:", reason);
+          Alert.alert("Notification generation failed", reason);
+        });
+      } else {
+      console.warn("SLM not ready yet — skipping notification");
+      }
+      
       Alert.alert("Success 🍦", `${product.name} added to your cart!`, [
         { text: "View Cart", onPress: () => navigation?.navigate?.("Main", { screen: "Cart" }) },
         { text: "Keep Browsing", style: "cancel" },
       ]);
-    }
-  };
-
-  const handleOrderNow = () => {
-    // Default behavior: add it to the cart, then jump straight to checkout.
-    // Pass a custom onOrderNow prop to override (e.g. your own checkout flow).
-    if (onOrderNow) {
-      onOrderNow(product, quantity);
-    } else {
-      onAddToCart?.(product, quantity);
-      navigation?.navigate?.("Main", { screen: "Cart" });
     }
   };
 
@@ -223,9 +235,9 @@ export default function ViewProductScreen({
 
           {/* Price row */}
           <View style={styles.priceRow}>
-            <Text style={[styles.price, { fontSize: scale(24) }]}>${displayPrice.toFixed(2)}</Text>
+            <Text style={[styles.price, { fontSize: scale(24) }]}>₹{displayPrice.toFixed(2)}</Text>
             {hasDiscount && (
-              <Text style={[styles.originalPrice, { fontSize: scale(15) }]}>${price.toFixed(2)}</Text>
+              <Text style={[styles.originalPrice, { fontSize: scale(15) }]}>₹{price.toFixed(2)}</Text>
             )}
           </View>
 
@@ -270,7 +282,7 @@ export default function ViewProductScreen({
         <View style={styles.bottomTotalWrap}>
           <Text style={styles.bottomLabel}>Total</Text>
           <Text style={[styles.bottomTotal, { fontSize: scale(17) }]}>
-            ${(displayPrice * quantity).toFixed(2)}
+            ₹{(displayPrice * quantity).toFixed(2)}
           </Text>
         </View>
 
@@ -284,19 +296,7 @@ export default function ViewProductScreen({
           <Text style={[styles.addToCartText, { fontSize: scale(13.5) }]}>Add to Cart</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.orderNowBtn, !inStock && styles.btnDisabled]}
-          activeOpacity={0.85}
-          disabled={!inStock}
-          onPress={handleOrderNow}
-        >
-          <Text style={[styles.orderNowText, { fontSize: scale(13.5) }]}>
-            {inStock ? "Order Now" : "Out of Stock"}
-          </Text>
-          {inStock && <Ionicons name="arrow-forward" size={15} color={COLORS.white} />}
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
-

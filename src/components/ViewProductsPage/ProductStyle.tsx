@@ -146,22 +146,5 @@ export const styles = StyleSheet.create({
   },
   addToCartText: { color: COLORS.pink, fontWeight: "900" },
 
-  orderNowBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: COLORS.pink,
-    paddingVertical: 13,
-    borderRadius: 24,
-    shadowColor: COLORS.pink,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  orderNowText: { color: COLORS.white, fontWeight: "900" },
-
   btnDisabled: { backgroundColor: "#EDE7FA", shadowOpacity: 0 },
 });

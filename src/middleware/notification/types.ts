@@ -14,8 +14,8 @@ export interface NotificationContext {
   emoji?: string;
 }
 
-// Order matters — must match the exact field order tokenizer.py used
-// when building "Context: k=v, k=v, ..." strings during training.
+// Order matters - must match the exact field order tokenizer.py used when
+// building "Context: k=v, k=v, ..." strings during training.
 export const CONTEXT_KEYS: (keyof NotificationContext)[] = [
   'scenario',
   'product',
@@ -32,10 +32,15 @@ export const CONTEXT_KEYS: (keyof NotificationContext)[] = [
   'emoji',
 ];
 
+/**
+ * Sampling options the ExecuTorch runtime actually exposes. There is no
+ * maxNewTokens / topK: generation stops at <|eos|> (or max_seq_len), so
+ * timeoutMs is the safety net against a runaway generation.
+ */
 export interface GenerationOptions {
-  maxNewTokens?: number;
   temperature?: number;
-  topK?: number;
+  topP?: number;
+  timeoutMs?: number;
 }
 
 export interface GenerationResult {
@@ -43,4 +48,6 @@ export interface GenerationResult {
   rawOutput: string;
   prompt: string;
   durationMs: number;
+  /** Only set by generateAndNotify: whether a device notification was shown. */
+  dispatched?: boolean;
 }

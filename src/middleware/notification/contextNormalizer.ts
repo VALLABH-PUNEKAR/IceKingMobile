@@ -1,45 +1,67 @@
 import { NotificationContext, CONTEXT_KEYS } from './types';
 import { DEFAULT_CONTEXT } from './defaults';
+import { VOCABULARY, VocabularyField } from './vocabulary';
 
-/**
- * The closed vocabulary your tokenizer was trained on, per field.
- *
- * IMPORTANT: this must be kept in sync with the actual categorical
- * values present in your training CSV (all.csv). A value outside this
- * list gets mapped to a trained default rather than passed through raw
- * — an out-of-vocabulary string in this field position is something
- * the model has never seen, and silently degrades output quality the
- * way we saw with "Chennai" and invented product names earlier.
- *
- * Fields left as [] are open-ended (product names, discount percentages,
- * emoji) and pass through unvalidated — tighten these if you see quality
- * issues tied to a specific field.
- */
-export const ALLOWED_VALUES: Record<keyof NotificationContext, string[]> = {
-  scenario: ['New Flavor', 'Seasonal Flavor', 'Discounts & Promotions', 'General Update', 'Cart Abandoned'],
-  product: [],
-  category: ['Ice Cream', 'Beverages', 'Snacks', 'General'],
-  customer_type: ['New', 'Returning'],
-  user_activity: ['Browsing', 'App Open', 'Cart Abandoned', 'Checkout'],
-  time_of_day: ['Morning', 'Afternoon', 'Evening', 'Night'],
-  day_type: ['Weekday', 'Weekend'],
-  season: ['Spring', 'Summer', 'Autumn', 'Winter'],
-  weather: ['Clear', 'Hot', 'Cold', 'Rainy'],
-  discount: [],
-  urgency: ['Low', 'Medium', 'High'],
-  tone: ['Friendly', 'Exciting', 'Playful', 'Urgent'],
-  emoji: [],
+type Field = keyof NotificationContext;
+
+// product and emoji are open-ended: a real catalog item the model never saw
+// is still better than silently swapping in a different product.
+const OPEN_FIELDS: Field[] = ['product', 'emoji'];
+
+// Common app-side wording -> the closest value that exists in training data.
+// Keys are lowercase. Only consulted when the value is NOT already in the vocabulary.
+const ALIASES: Partial<Record<Field, Record<string, string>>> = {
+  scenario: {
+    'item added to cart': 'Cart & Purchase Intent',
+    'add to cart': 'Cart & Purchase Intent',
+    'added to cart': 'Cart & Purchase Intent',
+  },
+  user_activity: {
+    'adding product': 'Adding to Cart',
+    'add to cart': 'Adding to Cart',
+  },
+  customer_type: {
+    regular: 'Returning',
+    repeat: 'Returning',
+    existing: 'Returning',
+  },
 };
 
-function normalizeField(key: keyof NotificationContext, value: string | undefined): string {
+// Case-insensitive lookup tables, built once.
+const LOOKUP: Partial<Record<Field, Map<string, string>>> = {};
+for (const field of Object.keys(VOCABULARY) as VocabularyField[]) {
+  LOOKUP[field] = new Map<string, string>(
+    VOCABULARY[field].map((v): [string, string] => [v.toLowerCase(), v])
+  );
+}
+
+function warnSubstituted(key: Field, value: string, fallback: string) {
+  if (__DEV__) {
+    console.warn(`[notification] ${key}="${value}" was not seen in training; using "${fallback}"`);
+  }
+}
+
+function normalizeDiscount(value: string, fallback: string): string {
+  // Any "NN%" is fine - digits tokenize the same way the training data did.
+  const numeric = value.match(/^(\d{1,3})(?:\.\d+)?\s*%?$/);
+  if (numeric) return `${numeric[1]}%`;
+  return LOOKUP.discount?.get(value.toLowerCase()) ?? fallback;
+}
+
+function normalizeField(key: Field, value: string | undefined): string {
   const fallback = DEFAULT_CONTEXT[key];
-  if (!value) return fallback;
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) return fallback;
 
-  const allowed = ALLOWED_VALUES[key];
-  if (allowed.length === 0) return value; // open-ended field, pass through
+  if (key === 'discount') return normalizeDiscount(trimmed, fallback);
+  if (OPEN_FIELDS.includes(key)) return trimmed;
 
-  const match = allowed.find((v) => v.toLowerCase() === value.toLowerCase());
-  return match ?? fallback;
+  const lower = trimmed.toLowerCase();
+  const resolved = LOOKUP[key]?.get(lower) ?? ALIASES[key]?.[lower];
+  if (resolved) return resolved;
+
+  warnSubstituted(key, trimmed, fallback);
+  return fallback;
 }
 
 export function normalizeContext(raw: Partial<NotificationContext>): Required<NotificationContext> {

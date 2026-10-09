@@ -17,7 +17,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import api from "@/api/api";
 
 export type CartItem = {
-  id: number;   
+  itemId: number;   
   image: string;       
   productId: number;   
   productName: string; 
@@ -26,7 +26,7 @@ export type CartItem = {
 };
 
 export type CartsEntity = {
-  id: number;          
+  cartId: number;          
   userId: number;      
   items: CartItem[];   
 };
@@ -75,7 +75,7 @@ export default function CartScreen({ navigation }: CartScreenProps) {
 
     const newQty = item.quantity + delta;
     if (newQty <= 0) {
-      removeItem(item.id);
+      removeItem(item.itemId);
       return;
     }
 
@@ -107,7 +107,7 @@ export default function CartScreen({ navigation }: CartScreenProps) {
       if (!prevCart) return null;
       return {
         ...prevCart,
-        items: prevCart.items.filter((item) => item.id !== cartItemId),
+        items: prevCart.items.filter((item) => item.itemId !== cartItemId),
       };
     });
 
@@ -121,7 +121,7 @@ export default function CartScreen({ navigation }: CartScreenProps) {
 
   const clearCart = async () => {
     try {
-      setCart({ id: cart?.id || 0, userId: cart?.userId || 0, items: [] });
+      setCart({ cartId: cart?.cartId || 0, userId: cart?.userId || 0, items: [] });
       await api.delete("/cart/clear");
     } catch (error) {
       console.error("Clear cart error:", error);
@@ -206,7 +206,7 @@ export default function CartScreen({ navigation }: CartScreenProps) {
 
                 return (
                   <View
-                    key={item.productId || item.id || index}
+                    key={item.productId || item.itemId || index}
                     style={styles.itemCard}
                   >
                     <View
@@ -234,7 +234,7 @@ export default function CartScreen({ navigation }: CartScreenProps) {
                         {item.productName || "Flavor"}
                       </Text>
                       <Text style={[styles.itemPrice, { fontSize: scale(14) }]}>
-                        ${Number(item.price ?? 0).toFixed(2)}
+                        ₹{Number(item.price ?? 0).toFixed(2)}
                       </Text>
 
                       <View style={styles.qtyRow}>
@@ -256,7 +256,7 @@ export default function CartScreen({ navigation }: CartScreenProps) {
 
                     <TouchableOpacity
                       style={styles.removeBtn}
-                      onPress={() => removeItem(item.id)}
+                      onPress={() => removeItem(item.itemId)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Ionicons name="trash-outline" size={16} color="#E4574A" />
@@ -294,17 +294,17 @@ export default function CartScreen({ navigation }: CartScreenProps) {
 
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal</Text>
-                <Text style={styles.summaryValue}>${subtotal.toFixed(2)}</Text>
+                <Text style={styles.summaryValue}>₹{subtotal.toFixed(2)}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Delivery Fee</Text>
-                <Text style={styles.summaryValue}>${DELIVERY_FEE.toFixed(2)}</Text>
+                <Text style={styles.summaryValue}>₹{DELIVERY_FEE.toFixed(2)}</Text>
               </View>
               {appliedPromo && (
                 <View style={styles.summaryRow}>
                   <Text style={[styles.summaryLabel, { color: COLORS.mint }]}>Discount</Text>
                   <Text style={[styles.summaryValue, { color: "#2E9E5B" }]}>
-                    -${discount.toFixed(2)}
+                    -₹{discount.toFixed(2)}
                   </Text>
                 </View>
               )}
@@ -312,7 +312,7 @@ export default function CartScreen({ navigation }: CartScreenProps) {
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, styles.totalLabel]}>Total</Text>
                 <Text style={[styles.summaryValue, styles.totalValue]}>
-                  ${total.toFixed(2)}
+                  ₹{total.toFixed(2)}
                 </Text>
               </View>
             </View>
@@ -323,10 +323,14 @@ export default function CartScreen({ navigation }: CartScreenProps) {
             <View>
               <Text style={styles.checkoutLabel}>Total</Text>
               <Text style={[styles.checkoutTotal, { fontSize: scale(18) }]}>
-                ${total.toFixed(2)}
+                ₹{total.toFixed(2)}
               </Text>
             </View>
-            <TouchableOpacity style={styles.checkoutBtn} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.checkoutBtn}
+              activeOpacity={0.85}
+              onPress={() => navigation?.navigate?.("COrder")}
+            >
               <Text style={[styles.checkoutBtnText, { fontSize: scale(15) }]}>
                 Checkout
               </Text>
